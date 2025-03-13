@@ -1,0 +1,395 @@
+openapi: 3.0.0
+info:
+  title: API Documentation
+  version: 1.0.0
+servers:
+  - url: https://console.fabrixai.com/v1
+    description: FabriXAI API Server
+components:
+  securitySchemes:
+    FabriXAIApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Use the API Key in the 'Authorization' header as 'Bearer {API_KEY}'"
+
+security:
+  - FabriXAIApiKeyAuth: []
+
+paths:
+  /completion-messages:
+    post:
+      summary: Create Completion Message
+      description: Send a request to generate a message.
+      operationId: createCompletionMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - response_mode
+                - user
+              properties:
+                inputs:
+                  type: object
+                  description: Allows the entry of various variable values defined by the App. The inputs parameter contains multiple key/value pairs, with each key corresponding to a specific variable and each value being the specific value for that variable. The text generation application requires at least one key/value pair to be inputted.
+                  properties:
+                    query:
+                      type: string
+                      description: An example of input to be processed.
+                response_mode:
+                  type: string
+                  description: The mode of response return, supporting "streaming" or "blocking".
+                  example: blocking
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+                  example: user
+                files:
+                  type: array
+                  description: File list, suitable for inputting files (images) combined with text understanding and answering questions, available only when the model supports Vision capability.
+                  items:
+                    type: object
+                    properties:
+                      'type':
+                        type: string
+                        description: 'Supported type: image (currently only supports image type)'
+                      transfer_method:
+                        type: string
+                        description: Transfer method, remote_url for image URL / local_file for file upload
+                      url:
+                        type: string
+                        description: Image URL (when the transfer method is remote_url)
+                      upload_file_id:
+                        type: string
+                        description: Uploaded file ID, which must be obtained by uploading through the File Upload API in advance (when the transfer method is local_file)
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique message ID
+                  answer:
+                    type: string
+                    description: Generated response text
+        '400':
+          description: 'invalid_param: abnormal parameter input; app_unavailable: App configuration unavailable; provider_not_initialize: no available model credential configuration; provider_quota_exceeded: model invocation quota insufficient; model_currently_not_support: current model unavailable; completion_request_error: text generation failed;'
+        '404':
+          description: Conversation does not exist
+        '500':
+          description: Internal server error
+  /completion-messages/{task_id}/stop:
+    post:
+      summary: Stop Generation
+      description: Only supported in streaming mode.
+      operationId: stopGeneration
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Task ID, can be obtained from the streaming chunk return Request Body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user
+              properties:
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Successfully stopped message generation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Always returns "success"
+                    example: success
+  /messages/{message_id}/feedbacks:
+    post:
+      summary: Message Feedback
+      description: End-users can provide feedback messages, facilitating application developers to optimize expected outputs.
+      operationId: messageFeedback
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Message ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+                - user
+              properties:
+                rating:
+                  type: string
+                  description: Upvote as 'like', downvote as 'dislike', revoke upvote as 'null'
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Successfully submitted feedback
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Always returns "success"
+                    example: success
+  /parameters:
+    get:
+      summary: Get Application Information
+      description: Used at the start of entering the page to obtain information such as features, input parameter names, types, and default values.
+      operationId: getAppInfo
+      parameters:
+        - name: user
+          in: query
+          required: true
+          schema:
+            type: string
+            description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Application details retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opening_statement:
+                    type: string
+                    description: Opening statement
+                  suggested_questions:
+                    type: array
+                    items:
+                      type: string
+                    description: List of suggested questions for the opening
+                  suggested_questions_after_answer:
+                    type: object
+                    description: Suggest questions after enabling the answer
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  speech_to_text:
+                    type: object
+                    description: Speech to text
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  retriever_resource:
+                    type: object
+                    description: Citation and Attribution
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  annotation_reply:
+                    type: object
+                    description: Annotation reply
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  user_input_form:
+                    type: array
+                    description: User input form configuration
+                    items:
+                      type: object
+                      properties:
+                        text_input:
+                          type: object
+                          description: Text input control
+                          properties:
+                            label:
+                              type: string
+                              description: Variable display label name
+                            variable:
+                              type: string
+                              description: Variable ID
+                            required:
+                              type: boolean
+                              description: Whether it is required
+                            default:
+                              type: string
+                              description: Default value
+                        paragraph:
+                          type: object
+                          description: Paragraph text input control
+                          properties:
+                            label:
+                              type: string
+                              description: Variable display label name
+                            variable:
+                              type: string
+                              description: Variable ID
+                            required:
+                              type: boolean
+                              description: Whether it is required
+                            default:
+                              type: string
+                              description: Default value
+                        select:
+                          type: object
+                          description: Dropdown control
+                          properties:
+                            label:
+                              type: string
+                              description: Variable display label name
+                            variable:
+                              type: string
+                              description: Variable ID
+                            required:
+                              type: boolean
+                              description: Whether it is required
+                            default:
+                              type: string
+                              description: Default value
+                            options:
+                              type: array
+                              items:
+                                type: string
+                              description: Option values
+                  file_upload:
+                    type: object
+                    description: File upload configuration
+                    properties:
+                      image:
+                        type: object
+                        description: 'Image settings Currently only supports image types: png, jpg, jpeg, webp, gif'
+                        properties:
+                          enabled:
+                            type: boolean
+                            description: Whether it is enabled
+                          number_limits:
+                            type: integer
+                            description: Image number limit, default is 3
+                          transfer_methods:
+                            type: array
+                            description: List of transfer methods, remote_url, local_file, must choose one
+                            items:
+                              type: string
+                  system_parameters:
+                    type: object
+                    description: System parameters
+                    properties:
+                      image_file_size_limit:
+                        type: string
+                        description: Image file upload size limit (MB)
+  /files/upload:
+    post:
+      summary: File Upload
+      description: Upload a file (currently only images are supported) for use when sending messages, enabling multimodal understanding of images and text. Supports png, jpg, jpeg, webp, gif formats. Uploaded files are for use by the current end-user only.
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - user
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to be uploaded.
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Successful file upload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    description: Unique file ID
+                  name:
+                    type: string
+                    description: File name
+                  size:
+                    type: integer
+                    description: File size (bytes)
+                  extension:
+                    type: string
+                    description: File extension
+                  mime_type:
+                    type: string
+                    description: File mime-type
+                  created_by:
+                    type: string
+                    format: uuid
+                    description: End-user ID
+                  created_at:
+                    type: integer
+                    description: Creation timestamp, e.g., 1705395332
+        '400':
+          description: 'no_file_uploaded: a file must be provided; too_many_files: currently only one file is accepted; unsupported_preview: the file does not support preview; unsupported_estimate: the file does not support estimation;'
+        '413':
+          description: 'file_too_large: the file is too large;'
+        '415':
+          description: 'unsupported_file_type: unsupported extension, currently only document files are accepted;'
+        '500':
+          description: internal server error
+        '503':
+          description: 's3_connection_failed: unable to connect to S3 service; s3_permission_denied: no permission to upload files to S3; s3_file_too_large: file exceeds S3 size limit;'
+  /text-to-audio:
+    post:
+      summary: Text to audio
+      description: Text to speech.
+      operationId: textToAudio
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - message_id
+                - text
+                - user
+              properties:
+                message_id:
+                  type: string
+                  description: For text messages generated by FabriXAI, simply pass the generated message-id directly. The backend will use the message-id to look up the corresponding content and synthesize the voice information directly. If both message_id and text are provided simultaneously, the message_id is given priority.
+                text:
+                  type: string
+                  description: Speech generated content.
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: 'success'

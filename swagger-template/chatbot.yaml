@@ -1,0 +1,729 @@
+openapi: 3.0.0
+info:
+  title: API Documentation
+  version: 1.0.0
+servers:
+  - url: https://console.fabrixai.com/v1
+    description: FabriXAI API Server
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Use the API Key in the 'Authorization' header as 'Bearer {API_KEY}'"
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /chat-messages:
+    post:
+      summary: Send Chat Messages
+      description: Send a request to the chat application.
+      operationId: sentChatMessages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+                - response_mode
+                - user
+              properties:
+                query:
+                  type: string
+                  description: User Input/Question content
+                inputs:
+                  type: object
+                  description: Allows the entry of various variable values defined by the App. The inputs parameter contains multiple key/value pairs, with each key corresponding to a specific variable and each value being the specific value for that variable. The text generation application requires at least one key/value pair to be inputted.
+                  properties:
+                    query:
+                      type: string
+                      description: An example of input to be processed.
+                response_mode:
+                  type: string
+                  description: The mode of response return, supporting "streaming" or "blocking".
+                  example: blocking
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+                  example: user
+                conversation_id:
+                  type: string
+                  description: Conversation ID, to continue the conversation based on previous chat records, it is necessary to pass the previous message's conversation_id.
+                files:
+                  type: array
+                  description: File list, suitable for inputting files (images) combined with text understanding and answering questions, available only when the model supports Vision capability.
+                  items:
+                    type: object
+                    properties:
+                      'type':
+                        type: string
+                        description: 'Supported type: image (currently only supports image type)'
+                      transfer_method:
+                        type: string
+                        description: Transfer method, remote_url for image URL / local_file for file upload
+                      url:
+                        type: string
+                        description: Image URL (when the transfer method is remote_url)
+                      upload_file_id:
+                        type: string
+                        description: Uploaded file ID, which must be obtained by uploading through the File Upload API in advance (when the transfer method is local_file)
+                auto_generate_name:
+                  type: boolean
+                  description: Auto-generate title, default is true. If set to false, can achieve async title generation by calling the conversation rename API and setting auto_generate to true.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique message ID
+                  conversation_id:
+                    type: string
+                    description: Conversation ID
+                  answer:
+                    type: string
+                    description: Generated response text
+        '400':
+          description: 'invalid_param: abnormal parameter input; app_unavailable: App configuration unavailable; provider_not_initialize: no available model credential configuration; provider_quota_exceeded: model invocation quota insufficient; model_currently_not_support: current model unavailable; completion_request_error: text generation failed;'
+        '404':
+          description: Conversation does not exist
+        '500':
+          description: Internal server error
+  /chat-messages/{task_id}/stop:
+    post:
+      summary: Stop Generation
+      description: Only supported in streaming mode.
+      operationId: stopGeneration
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Task ID, can be obtained from the streaming chunk return Request Body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user
+              properties:
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Successfully stopped message generation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Always returns "success"
+                    example: success
+  /conversations:
+    get:
+      summary: Get Conversations
+      description: Retrieve the conversation list for the current user, defaulting to the most recent 20 entries.
+      operationId: getConversations
+      parameters:
+        - name: user
+          in: query
+          required: true
+          schema:
+            type: string
+            description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+        - name: last_id
+          in: query
+          required: true
+          schema:
+            type: string
+            description: The ID of the last record on the current page, default is null.
+        - name: limit
+          in: query
+          required: true
+          schema:
+            type: integer
+            description: How many records to return in one request, default is the most recent 20 entries.
+        - name: pinned
+          in: query
+          required: true
+          schema:
+            type: boolean
+            description: Return only pinned conversations as true, only non-pinned as false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    description: List of conversations
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Conversation ID
+                        name:
+                          type: string
+                          description: Conversation name, by default, is a snippet of the first question asked by the user in the conversation.
+                        inputs:
+                          type: object
+                          description: User input parameters.
+                        introduction:
+                          type: string
+                          description: Introduction
+                        created_at:
+                          type: integer
+                          description: Creation timestamp, e.g., 1705395332
+                  has_more:
+                    type: boolean
+                    description: Whether there is a next page
+                  limit:
+                    type: integer
+                    description: Number of entries returned, if input exceeds system limit, system limit number is returned
+  /conversations/{conversation_id}:
+    delete:
+      summary: Delete Conversation
+      description: Delete a conversation.
+      operationId: deleteConversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Conversation ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: string
+                  description: The user identifier, defined by the developer, must ensure uniqueness within the application.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Always returns "success"
+                    example: success
+  /conversations/{conversation_id}/name:
+    post:
+      summary: Rename Conversation
+      description: Rename a conversation.
+      operationId: renameConversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Conversation ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: The name of the conversation. This parameter can be omitted if auto_generate is set to true.
+                auto_generate:
+                  type: boolean
+                  description: Automatically generate the title, default is false
+                user:
+                  type: string
+                  description: The user identifier, defined by the developer, must ensure uniqueness within the application.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Conversation ID
+                  name:
+                    type: string
+                    description: Conversation name
+                  inputs:
+                    type: array
+                    description: User input parameters.
+                    items:
+                      type: object
+                  introduction:
+                    type: string
+                    description: Introduction
+                  created_at:
+                    type: integer
+                    description: Creation timestamp, e.g., 1705395332
+  /messages:
+    get:
+      summary: Get Conversation History Messages
+      description: Returns historical chat records in a scrolling load format, with the first page returning the latest {limit} messages, i.e., in reverse order.
+      operationId: getConversationHistoryMessages
+      parameters:
+        - name: conversation_id
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Conversation ID
+        - name: user
+          in: query
+          required: true
+          schema:
+            type: string
+            description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+        - name: first_id
+          in: query
+          schema:
+            type: string
+            description: The ID of the first chat record on the current page, default is null.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            description: How many chat history messages to return in one request, default is 20
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    description: Message list
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Message ID
+                        conversation_id:
+                          type: string
+                          description: Conversation ID
+                        inputs:
+                          type: object
+                          description: User input parameters.
+                        query:
+                          type: string
+                          description: User input / question content.
+                        message_files:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                description: ID
+                              type:
+                                type: string
+                                description: File type, image for images
+                              url:
+                                type: string
+                                description: Preview image URL
+                              belongs_to:
+                                type: string
+                                description: belongs to, user or assistant
+                        answer:
+                          type: string
+                          description: Response message content
+                        created_at:
+                          type: integer
+                          description: Creation timestamp, e.g., 1705395332
+                  has_more:
+                    type: boolean
+                    description: Whether there is a next page
+                  limit:
+                    type: integer
+                    description: Number of returned items, if input exceeds system limit, returns system limit amount
+  /messages/{message_id}/feedbacks:
+    post:
+      summary: Message Feedback
+      description: End-users can provide feedback messages, facilitating application developers to optimize expected outputs.
+      operationId: messageFeedback
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Message ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rating:
+                  type: string
+                  description: Upvote as 'like', downvote as 'dislike', revoke upvote as 'null'
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Successfully submitted feedback
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Always returns "success"
+                    example: success
+  /messages/{message_id}/suggested:
+    get:
+      summary: Get next suggested questions
+      description: Get next questions suggestions for the current message
+      operationId: getNextSuggestedQuestions
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Message ID
+        - name: user
+          in: query
+          required: true
+          schema:
+            type: string
+            description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Always returns "success"
+                    example: success
+                  data:
+                    type: array
+                    items:
+                      type: string
+                    description: List of suggested questions for the opening
+  /parameters:
+    get:
+      summary: Get Application Information
+      description: Used at the start of entering the page to obtain information such as features, input parameter names, types, and default values.
+      operationId: getAppInfo
+      parameters:
+        - name: user
+          in: query
+          required: true
+          schema:
+            type: string
+            description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Application details retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opening_statement:
+                    type: string
+                    description: Opening statement
+                  suggested_questions:
+                    type: array
+                    items:
+                      type: string
+                    description: List of suggested questions for the opening
+                  suggested_questions_after_answer:
+                    type: object
+                    description: Suggest questions after enabling the answer
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  speech_to_text:
+                    type: object
+                    description: Speech to text
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  retriever_resource:
+                    type: object
+                    description: Citation and Attribution
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  annotation_reply:
+                    type: object
+                    description: Annotation reply
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                  user_input_form:
+                    type: array
+                    description: User input form configuration
+                    items:
+                      type: object
+                      properties:
+                        text_input:
+                          type: object
+                          description: Text input control
+                          properties:
+                            label:
+                              type: string
+                              description: Variable display label name
+                            variable:
+                              type: string
+                              description: Variable ID
+                            required:
+                              type: boolean
+                              description: Whether it is required
+                            default:
+                              type: string
+                              description: Default value
+                        paragraph:
+                          type: object
+                          description: Paragraph text input control
+                          properties:
+                            label:
+                              type: string
+                              description: Variable display label name
+                            variable:
+                              type: string
+                              description: Variable ID
+                            required:
+                              type: boolean
+                              description: Whether it is required
+                            default:
+                              type: string
+                              description: Default value
+                        select:
+                          type: object
+                          description: Dropdown control
+                          properties:
+                            label:
+                              type: string
+                              description: Variable display label name
+                            variable:
+                              type: string
+                              description: Variable ID
+                            required:
+                              type: boolean
+                              description: Whether it is required
+                            default:
+                              type: string
+                              description: Default value
+                            options:
+                              type: array
+                              items:
+                                type: string
+                              description: Option values
+                        file_upload:
+                          type: object
+                          description: File upload configuration
+                  image:
+                    type: object
+                    description: "Image settings (Currently only supports image types: png, jpg, jpeg, webp, gif)"
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Whether it is enabled
+                      number_limits:
+                        type: integer
+                        description: Image number limit, default is 3
+                      transfer_methods:
+                        type: array
+                        items:
+                          type: string
+                        description: List of transfer methods, remote_url, local_file, must choose one
+                  system_parameters:
+                    type: object
+                    description: System parameters
+                    properties:
+                      image_file_size_limit:
+                        type: string
+                        description: Image file upload size limit (MB)
+  /meta:
+    get:
+      summary: Get Application Meta Information
+      description: Used to get icons of tools in this application
+      operationId: getAppMetaInfo
+      parameters:
+        - name: user
+          in: query
+          required: true
+          schema:
+            type: string
+            description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Application details retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tool_icons:
+                    type: object
+                    description: tool icons
+  /files/upload:
+    post:
+      summary: File Upload
+      description: Upload a file (currently only images are supported) for use when sending messages, enabling multimodal understanding of images and text. Supports png, jpg, jpeg, webp, gif formats. Uploaded files are for use by the current end-user only.
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - user
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to be uploaded.
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Successful file upload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Unique file ID
+                  name:
+                    type: string
+                    description: File name
+                  size:
+                    type: integer
+                    description: File size in bytes
+                  extension:
+                    type: string
+                    description: File extension
+                  mime_type:
+                    type: string
+                    description: File mime-type
+                  created_by:
+                    type: string
+                    format: uuid
+                    description: End-user ID
+                  created_at:
+                    type: integer
+                    description: Creation timestamp, e.g., 1705395332
+        '400':
+          description: 'no_file_uploaded: a file must be provided; too_many_files: currently only one file is accepted; unsupported_preview: the file does not support preview; unsupported_estimate: the file does not support estimation;'
+        '413':
+          description: 'file_too_large: the file is too large;'
+        '415':
+          description: 'unsupported_file_type: unsupported extension, currently only document files are accepted;'
+        '500':
+          description: internal server error
+        '503':
+          description: 's3_connection_failed: unable to connect to S3 service; s3_permission_denied: no permission to upload files to S3; s3_file_too_large: file exceeds S3 size limit;'
+  /audio-to-text:
+    post:
+      summary: Audio to text
+      description: Speech to Text
+      operationId: audioToText
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - user
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Audio file. Supported formats: ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm'] File size limit: 15MB"
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+                    description: Output text
+  /text-to-audio:
+    post:
+      summary: Text to audio
+      description: Text to speech.
+      operationId: textToAudio
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - message_id
+                - text
+                - user
+              properties:
+                message_id:
+                  type: string
+                  description: For text messages generated by FabriXAI, simply pass the generated message-id directly. The backend will use the message-id to look up the corresponding content and synthesize the voice information directly. If both message_id and text are provided simultaneously, the message_id is given priority.
+                text:
+                  type: string
+                  description: Speech generated content.
+                user:
+                  type: string
+                  description: User identifier, used to define the identity of the end-user for retrieval and statistics. Should be uniquely defined by the developer within the application.
+      responses:
+        '200':
+          description: 'success'
